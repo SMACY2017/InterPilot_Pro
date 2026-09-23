@@ -1,8 +1,8 @@
-# InterPilot
+# InterPilot Pro
 
 English | [中文](README.md)
 
-InterPilot is a Windows desktop assistant for paper presentations, meetings, and Q&A. It captures microphone and system-loopback audio as separate sources, transcribes the discussion, and combines recent speech with a slide screenshot and paper excerpts to produce concise, source-aware speaking notes.
+InterPilot Pro is a Windows desktop assistant for paper presentations, meetings, and Q&A. It captures microphone and system-loopback audio as separate sources, transcribes the discussion, and combines recent speech with a slide screenshot and paper excerpts to produce concise, source-aware speaking notes.
 
 Users are responsible for ensuring that recording, transcription, and data upload comply with meeting rules, participant consent requirements, and local law. Use headphones and keep unrelated notifications and media off the selected output device.
 
@@ -24,7 +24,9 @@ Users are responsible for ensuring that recording, transcription, and data uploa
 
 The default answer/vision model is `Qwen/Qwen3.8-27B`. Actual model access depends on the account. Use Settings to test the connection, refresh the model list, or enter a model ID directly.
 
-![InterPilot presentation console](doc_pic/GUI.png)
+If you do not have an API key, you can register through the [SiliconFlow invitation link](https://cloud.siliconflow.cn/i/TzKmtDJH) with invite code `TzKmtDJH`. The original promotion offered invited new users CNY 14 in credits; check the platform for the current offer. After registering, open **API Keys** in the SiliconFlow console, create a key, and enter it in InterPilot Pro Settings. Available model IDs are listed in the [SiliconFlow model catalog](https://cloud.siliconflow.cn/models). Other OpenAI-compatible providers and keyless local endpoints are supported as well.
+
+![InterPilot Pro presentation console](doc_pic/GUI.png)
 
 ## Presentation workflow
 

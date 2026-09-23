@@ -1,8 +1,8 @@
-# InterPilot
+# InterPilot Pro
 
 [English](README_en.md) | 中文
 
-InterPilot 是面向论文分享、会议和讨论的 Windows 桌面助手。它可以分别采集麦克风与系统声音，持续转写讨论，并结合当前幻灯片截图和论文 PDF，生成适合演讲者快速阅读的回答提示。
+InterPilot Pro 是面向论文分享、会议和讨论的 Windows 桌面助手。它可以分别采集麦克风与系统声音，持续转写讨论，并结合当前幻灯片截图和论文 PDF，生成适合演讲者快速阅读的回答提示。
 
 > 使用者应确保音频采集、转写和资料上传符合会议规则、参与者知情要求及当地法律。请使用耳机，并确保所选系统输出设备主要播放会议声音；关闭无关视频和通知声音。
 
@@ -24,7 +24,9 @@ InterPilot 是面向论文分享、会议和讨论的 Windows 桌面助手。它
 
 默认回答与视觉模型为 `Qwen/Qwen3.8-27B`。模型权限和能力以账户实际可用列表为准；可在设置中测试连接、刷新列表或直接填写模型 ID。SiliconFlow 的 OpenAI 兼容接口支持用 base64 图片调用视觉模型，详见其[视觉输入文档](https://docs.siliconflow.cn/docs/userguide/capabilities/vision)。
 
-![InterPilot 演讲辅助控制台](doc_pic/GUI.png)
+还没有 API key 的用户可以通过[硅基流动邀请链接](https://cloud.siliconflow.cn/i/TzKmtDJH)注册（邀请码 `TzKmtDJH`）。原活动为受邀新用户提供 14 元额度，实际赠送额度请以平台当前活动规则为准。注册后在控制台左侧进入“API 密钥”，新建密钥并填入 InterPilot Pro 的设置窗口；模型名称可在[模型广场](https://cloud.siliconflow.cn/models)查看。也可以使用其他 OpenAI 兼容服务，或使用下文介绍的无密钥本地接口。
+
+![InterPilot Pro 演讲辅助控制台](doc_pic/GUI.png)
 
 ## 推荐的论文分享流程
 
