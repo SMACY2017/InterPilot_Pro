@@ -66,7 +66,8 @@ The one-click check briefly opens selected input devices, sends a generated two-
 To build the release yourself on Windows:
 
 ```powershell
-python -m pip install -r requirements-build.txt
+python -m pip install setuptools==80.9.0 wheel
+python -m pip install --no-build-isolation -r requirements-build.txt
 python packaging/build_windows.py
 ```
 
@@ -79,7 +80,8 @@ Python 3.10 is recommended:
 ```powershell
 conda create -n interpilot python=3.10
 conda activate interpilot
-pip install -r requirements.txt
+python -m pip install setuptools==80.9.0 wheel
+python -m pip install --no-build-isolation -r requirements.txt
 python main.py
 ```
 
@@ -122,7 +124,7 @@ Source labels describe capture channels rather than verified speaker identities.
 ```powershell
 python main_cmd.py --list-devices
 python main_cmd.py --audio output/test_record.wav --transcribe-only
-pip install -r requirements-dev.txt
+python -m pip install --no-build-isolation -r requirements-dev.txt
 python -m pytest -q
 python -m compileall -q main.py main_cmd.py src
 python -m ruff check main.py main_cmd.py src tests
