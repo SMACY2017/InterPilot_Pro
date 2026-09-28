@@ -87,6 +87,8 @@ def test_visual_hierarchy_and_settings_dialog(monkeypatch):
     assert tabs.tabText(0) == "模型与连接"
     assert tabs.tabText(3) == "材料与截图"
     assert dialog.model.isEditable()
+    assert dialog.controls["endpoint_type"].count() == 3
+    assert dialog.controls["api_compatibility"].count() == 4
     dialog.on_models(["Qwen/Test-A", "Qwen/Test-B"], "")
     assert dialog.model.findText("Qwen/Test-B") >= 0
     dialog.model.hidePopup()

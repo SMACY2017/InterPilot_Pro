@@ -1,6 +1,7 @@
 """Lazy ASR: no model import or download on GUI startup."""
 import threading
 from pathlib import Path
+from src.llm_client import create_openai_client
 from src.settings import Settings
 
 
@@ -31,10 +32,7 @@ class SpeechTranscriber:
         if Path(audio_path).stat().st_size <= 44:
             return ""
         if self.settings.asr_backend == "cloud":
-            from openai import OpenAI
-            with OpenAI(api_key=self.settings.api_key or "not-required",
-                        base_url=self.settings.api_url,
-                        timeout=self.settings.timeout, max_retries=0) as client:
+            with create_openai_client(self.settings) as client:
                 with open(audio_path, "rb") as source:
                     result = client.audio.transcriptions.create(
                         model=self.settings.asr_model, file=source)

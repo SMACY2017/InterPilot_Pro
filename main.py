@@ -508,7 +508,8 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
     def client_signature(settings):
         return (settings.api_url, settings.api_key, settings.model,
                 settings.timeout, settings.max_tokens, settings.system_prompt,
-                settings.enable_thinking, settings.thinking_budget)
+                settings.enable_thinking, settings.thinking_budget,
+                settings.endpoint_type, settings.api_compatibility)
 
     def get_llm_client(self, settings):
         signature = self.client_signature(settings)

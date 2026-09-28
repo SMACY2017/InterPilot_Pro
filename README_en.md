@@ -17,6 +17,7 @@ Users are responsible for ensuring that recording, transcription, and data uploa
 - One Settings window covers the API, model, prompts, audio devices, paper, initial image, screenshot strategy, and hotkeys. Both SiliconFlow and local OpenAI-compatible endpoints are supported.
 - Available models can be fetched, searched, and selected from a dropdown. Thinking is disabled by default for low first-token latency, with an optional token budget.
 - The API key is optional for local services. Remote keys can be stored with Windows DPAPI and are never written to JSON or Git.
+- Localhost, loopback, and common private-network endpoints automatically bypass `HTTP_PROXY`; service location and SiliconFlow, SGLang/vLLM, or generic OpenAI compatibility can also be selected manually.
 - Streaming output, connection reuse, first-token/total latency display, cancellation, session export, and page pinning.
 - The answer pane receives most of the window by default; Focus mode hides the sidebar and transcript when needed.
 - Focus mode can keep the transcript visible, while rolling ASR text remains at a fixed UI height.
@@ -72,12 +73,16 @@ Open Settings on first launch, enter the API URL and model ID, and add an API ke
 Any local server that implements an OpenAI-compatible Chat Completions endpoint can be used without a key:
 
 ```text
-API URL:  http://localhost:8000/v1
+API URL:  http://localhost:8100/v1
 API key:  leave blank
 Model ID: use the name exposed by the local server
 ```
 
 Include the `/v1` path expected by the server. The model dropdown depends on `GET /models`; if the server does not implement it, enter the model ID manually. Screenshot requests also require a model and server that accept OpenAI-style image input. Clear the initial reference image and avoid “Capture & Ask” when using a text-only model.
+
+On company-managed computers, HTTPX normally reads environment variables such as `HTTP_PROXY`. This can route localhost and intranet requests through a corporate proxy and cause a 504. With Service Location set to Auto, InterPilot Pro detects localhost, loopback and private IP addresses, single-label hosts, and common intranet suffixes, then disables environment proxies for that connection. Select Self-hosted manually for a private DNS suffix that cannot be detected. Hosted endpoints continue to use the system proxy.
+
+For local Qwen deployments on SGLang or vLLM, keep API Compatibility on Auto or choose SGLang/vLLM explicitly. Disabling thinking sends `chat_template_kwargs.enable_thinking=false`, as required by SGLang's Qwen templates. SiliconFlow continues to receive its top-level `enable_thinking` and `thinking_budget` fields, while Generic OpenAI sends no vendor extension. When thinking is enabled on SGLang/vLLM, reasoning consumes the `max_tokens` allowance, so raise the total generation-token limit accordingly. See the [SGLang Qwen documentation](https://github.com/sgl-project/sglang/blob/main/docs_new/cookbook/autoregressive/Qwen/Qwen3.6.mdx).
 
 ## Data handling
 

@@ -2,6 +2,7 @@ PyQt5==5.15.11
 PyQt5_sip==12.17.0
 PyAudioWPatch==0.2.12.7
 openai==1.68.2
+httpx==0.28.1
 openai-whisper==20240930
 markdown2==2.5.3
 pypdf==5.9.0

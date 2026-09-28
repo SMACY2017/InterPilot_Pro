@@ -23,6 +23,8 @@ class Settings:
     api_url: str = "https://api.siliconflow.cn/v1"
     api_key: str = ""
     remember_api_key: bool = True
+    endpoint_type: str = "auto"
+    api_compatibility: str = "auto"
     model: str = "Qwen/Qwen3.8-27B"
     enable_thinking: bool = False
     thinking_budget: int = 512
@@ -63,6 +65,10 @@ class Settings:
             raise ValueError("API 地址需要以 https:// 或 http:// 开头")
         if not self.model.strip():
             raise ValueError("请填写模型名称")
+        if self.endpoint_type not in ("auto", "self_hosted", "hosted"):
+            raise ValueError("未知的服务位置")
+        if self.api_compatibility not in ("auto", "siliconflow", "sglang", "generic"):
+            raise ValueError("未知的接口兼容模式")
         if self.asr_backend not in ("local", "cloud"):
             raise ValueError("未知的转写方式")
         if self.capture_mode not in ("screen", "region"):
@@ -70,7 +76,7 @@ class Settings:
         limits = {"chunk_seconds": (2, 30), "silence_ms": (200, 3000),
                   "partial_interval_ms": (500, 5000),
                   "energy_threshold": (0, 5000), "auto_interval": (5, 120),
-                  "context_chars": (1000, 30000), "max_tokens": (100, 8192),
+                  "context_chars": (1000, 30000), "max_tokens": (100, 65536),
                   "reference_chars": (2000, 50000), "paper_page": (0, 9999),
                   "image_max_edge": (640, 2560), "thinking_budget": (128, 32768),
                   "timeout": (5, 120)}

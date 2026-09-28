@@ -3,7 +3,12 @@ import threading
 from PyQt5 import QtCore, QtWidgets
 from src.audio_capture import list_devices
 from src.hotkeys import parse_hotkey
-from src.llm_client import LLMClient, safe_error
+from src.llm_client import (
+    LLMClient,
+    is_self_hosted_endpoint,
+    resolved_compatibility,
+    safe_error,
+)
 from src.settings import ROOT
 from src.theme import APP_STYLE
 
@@ -102,6 +107,11 @@ class SettingsDialog(QtWidgets.QDialog):
 
         connection = form("模型与连接")
         line(connection, "api_url", "API 地址")
+        combo(connection, "endpoint_type", "服务位置", [
+            ("自动判断（推荐）", "auto"),
+            ("本地 / 内网自建（绕过系统代理）", "self_hosted"),
+            ("公网托管服务（使用系统代理）", "hosted"),
+        ])
         secret = line(connection, "api_key", "API key（本地可留空）")
         secret.setEchoMode(QtWidgets.QLineEdit.Password)
         self.remember = QtWidgets.QCheckBox("用 Windows 账户加密后保存在本机")
@@ -110,6 +120,7 @@ class SettingsDialog(QtWidgets.QDialog):
         connection.addRow("记住密钥", self.remember)
         note = QtWidgets.QLabel(
             "本地 OpenAI 兼容服务可留空密钥，并把 API 地址设为 http://localhost:端口/v1。"
+            "自动模式会让 localhost、回环地址和常见内网地址绕过 HTTP_PROXY；无法识别的公司内网域名请手动选择“本地 / 内网自建”。"
             "远程服务的密钥不会写入 JSON 或 Git；也可设置 SILICONFLOW_API_KEY 环境变量。"
         )
         note.setObjectName("mutedLabel")
@@ -148,14 +159,21 @@ class SettingsDialog(QtWidgets.QDialog):
         self.connection_status.setObjectName("mutedLabel")
         self.connection_status.setWordWrap(True)
         connection.addRow(self.connection_status)
+        combo(connection, "api_compatibility", "接口兼容模式", [
+            ("自动判断（SiliconFlow / 本地 Qwen）", "auto"),
+            ("SiliconFlow", "siliconflow"),
+            ("SGLang / vLLM（Qwen 模板参数）", "sglang"),
+            ("通用 OpenAI（不发送思考扩展）", "generic"),
+        ])
         thinking = QtWidgets.QCheckBox("启用深度思考（会增加首字等待时间）")
         thinking.setChecked(settings.enable_thinking)
         self.controls["enable_thinking"] = thinking
         connection.addRow("推理模式", thinking)
-        thinking_budget = spin(connection, "thinking_budget", "思考 token 上限", 128, 32768)
+        thinking_budget = spin(connection, "thinking_budget", "SiliconFlow 思考 token 上限", 128, 32768)
+        thinking_budget.setToolTip("SGLang / vLLM 通常不接受此请求级预算；启用思考时需提高回答 token 上限")
         thinking_budget.setEnabled(settings.enable_thinking)
         thinking.toggled.connect(thinking_budget.setEnabled)
-        spin(connection, "max_tokens", "回答 token 上限", 100, 8192)
+        spin(connection, "max_tokens", "生成 token 总上限", 100, 65536)
         spin(connection, "timeout", "请求超时（秒）", 5, 120)
 
         prompts = form("提示词")
@@ -352,7 +370,18 @@ class SettingsDialog(QtWidgets.QDialog):
         self.model.addItems(models)
         self.model.setCurrentText(selected)
         self.model.view().setMinimumWidth(max(560, self.model.width()))
-        self.connection_status.setText(f"连接成功，共 {len(models)} 个模型。请选择或继续输入模型 ID。")
+        settings = self.values()
+        direct = is_self_hosted_endpoint(settings.api_url, settings.endpoint_type)
+        network = "已绕过环境代理直连" if direct else "使用系统网络设置"
+        compatibility = {
+            "siliconflow": "SiliconFlow",
+            "sglang": "SGLang / vLLM",
+            "generic": "通用 OpenAI",
+        }[resolved_compatibility(settings)]
+        self.connection_status.setText(
+            f"连接成功，共 {len(models)} 个模型 · {network} · {compatibility} 兼容模式。"
+            "请选择或继续输入模型 ID。"
+        )
         QtCore.QTimer.singleShot(0, self.model.showPopup)
 
     def save(self):

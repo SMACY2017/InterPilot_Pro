@@ -17,6 +17,7 @@ InterPilot Pro 是面向论文分享、会议和讨论的 Windows 桌面助手�
 - 设置窗口统一配置 API、模型、提示词、音频设备、论文、初始图片、截图策略和快捷键；支持 SiliconFlow 及本机 OpenAI 兼容接口，主界面只保留演讲时需要的操作。
 - 模型列表可从 API 获取、搜索和下拉选择；默认关闭深度思考以降低首字延迟，也可手动启用并限制思考 token。
 - API key 为可选项；本地服务可留空，远程密钥可用 Windows DPAPI 按当前账户加密保存在本机，不写入 JSON 或 Git。
+- 自动识别 localhost、回环和常见内网地址并绕过 `HTTP_PROXY`；支持手动指定服务位置和 SiliconFlow、SGLang/vLLM、通用 OpenAI 兼容模式。
 - 流式回答、连接复用、首字/总耗时显示、取消请求、会话导出与论文页码优先指定。
 - 即时提示默认占据主要空间；可拖动上下分隔线，或启用“专注提示”隐藏侧栏与讨论区。
 - 专注阅读时可选择保留讨论；实时识别摘要保持固定高度，不会随临时文本伸缩界面。
@@ -85,12 +86,16 @@ scoop install ffmpeg
 只要本地模型服务实现 OpenAI 兼容的 Chat Completions 接口，就可以不使用 API key。例如：
 
 ```text
-API 地址: http://localhost:8000/v1
+API 地址: http://localhost:8100/v1
 API key:  留空
 模型 ID:  填写本地服务实际暴露的名称
 ```
 
 地址应包含服务要求的 `/v1` 路径。模型列表按钮依赖 `GET /models`；未实现该接口时不影响手动输入模型 ID。发送截图还要求本地模型及服务支持 OpenAI 风格的图片输入；使用纯文本模型时，请在“材料与截图”中清空初始参考图片，并避免使用“截图并提示”。
+
+在使用公司代理的电脑上，HTTPX 默认会读取 `HTTP_PROXY` 等环境变量，错误地让 localhost 或内网请求经过代理并产生 504。InterPilot Pro 会在“服务位置”为“自动判断”时识别 localhost、回环地址、私有 IP、单段内网主机名以及常见内网域名后缀，并关闭该连接的环境代理；自定义企业域名无法自动识别时，请手动选择“本地 / 内网自建”。公网服务仍保持系统代理设置。
+
+本地 Qwen + SGLang/vLLM 推荐保持“接口兼容模式”为“自动判断”，或手动选择“SGLang / vLLM”。关闭深度思考时，程序会发送 `chat_template_kwargs.enable_thinking=false`；这是 SGLang 的 Qwen 模板所需形式。SiliconFlow 仍使用其顶层 `enable_thinking` 与 `thinking_budget` 参数，通用 OpenAI 模式则不发送厂商扩展。若在 SGLang/vLLM 中启用思考，推理内容会占用 `max_tokens`，应相应提高“生成 token 总上限”。参见 [SGLang Qwen 文档](https://github.com/sgl-project/sglang/blob/main/docs_new/cookbook/autoregressive/Qwen/Qwen3.6.mdx)。
 
 如果密钥曾提交或发送到不可信位置，应在服务商控制台撤销并重新生成。即使从当前版本删除，密钥仍可能留在 Git 历史中。
 
