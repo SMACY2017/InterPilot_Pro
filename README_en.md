@@ -9,7 +9,9 @@ Users are responsible for ensuring that recording, transcription, and data uploa
 ## Features
 
 - Independent microphone and WASAPI loopback selection, enable switches, and level meters.
-- Local Whisper or SiliconFlow cloud transcription with silence-aware chunking; local mode shows rolling drafts and corrects them after a pause.
+- Local Whisper or any compatible cloud audio transcription API with silence-aware chunking; local mode shows rolling drafts and corrects them after a pause.
+- The local model list shows cache state and paths, and first-use download progress appears in the UI before capture begins.
+- Cloud ASR can use its own endpoint, key, and model ID; one-click diagnostics check capture, transcription, and streamed answers separately.
 - Semi-automatic mode: keep transcribing and request a hint with a button or global hotkey.
 - Automatic mode: check new discussion for questions or objections and stay quiet when no useful hint is needed.
 - Local PDF text extraction and page-level excerpts with physical PDF page references.
@@ -50,6 +52,27 @@ A clear screenshot is enough to test the visual Q&A path. It remains fixed until
 | Show / hide the window | `Ctrl+Alt+H` |
 
 ## Install and run
+
+### Windows portable release
+
+The Windows ZIP contains `InterPilot_Pro.exe` and its `_internal` folder. Extract the **whole archive to a writable directory** and run the exe. Python and a separate FFmpeg installation are not required. The first use of a local Whisper model still downloads its weights. Settings, encrypted keys, and exported sessions are stored beside the exe, so avoid placing the bundle under `Program Files`.
+
+Before your first session, open **Settings → Audio & transcription**. The local Whisper list shows which models are cached and where. You can initialize the selected model there, or click Start Listening: the main window then shows download, verification, and loading progress **before audio capture starts**. The default cache is `~/.cache/whisper` for the current Windows user; `XDG_CACHE_HOME` overrides its parent directory. Download errors appear in the UI, so a release build needs no console.
+
+For cloud transcription, select the OpenAI-compatible audio API. By default it shares the answer model's API URL and key. An independent audio URL can have its own key; leaving that key empty does not forward the answer model's key to the independent service. The default `FunAudioLLM/SenseVoiceSmall` is only a SiliconFlow example. The service's `/models` list may include non-audio models, so verify the chosen ID with the connection check. The separate audio key is stored using Windows DPAPI.
+
+The one-click check briefly opens selected input devices, sends a generated two-second test audio through ASR, and asks the answer model for a short streamed response. Cloud calls may incur a small charge. This checks basic connectivity and execution, not meeting sound quality, recognition accuracy, or image understanding; try real speech and a screenshot before a live session.
+
+To build the release yourself on Windows:
+
+```powershell
+python -m pip install -r requirements-build.txt
+python packaging/build_windows.py
+```
+
+The ZIP and its SHA-256 checksum appear in `dist/`. Before publishing, verify launch, audio capture, transcription, and model requests on a Windows machine without Python installed.
+
+### Run from source
 
 Python 3.10 is recommended:
 

@@ -5,9 +5,13 @@ __pycache__/
 config.local.json*
 config.local.ini
 config.key*
+config.asr.key*
 .env
 .env.*
 pre/
 output/
 tmp/
 *.log
+build/
+dist/
+*.spec

@@ -1,4 +1,7 @@
 import json
+import hashlib
+import io
+import sys
 import threading
 from array import array
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -6,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 import src.llm_client as llm_module
+import src.diagnostics as diagnostic_module
 
 from src.audio_capture import Chunker
 from src.context import Paper, build_prompt
@@ -17,6 +21,8 @@ from src.llm_client import (
     safe_error,
 )
 from src.settings import Settings, load_secret, save_secret
+from src.transcriber import cloud_settings
+from src.whisper_models import ensure_model, inventory, model_path
 
 
 def test_local_openai_endpoint_uses_placeholder_key(monkeypatch):
@@ -104,11 +110,63 @@ def test_gateway_timeout_explains_local_proxy_fix():
 
 def test_settings_never_write_plaintext_key(tmp_path):
     path = tmp_path / "settings.json"
-    settings = Settings(api_key="super-secret", remember_api_key=False)
+    settings = Settings(api_key="super-secret", asr_api_key="audio-secret",
+                        remember_api_key=False)
     settings.save(path)
     raw = path.read_text(encoding="utf-8")
     assert "super-secret" not in raw
+    assert "audio-secret" not in raw
     assert "api_key" not in json.loads(raw)
+    assert "asr_api_key" not in json.loads(raw)
+
+
+def test_cloud_audio_can_use_independent_local_endpoint():
+    settings = Settings(api_url="https://api.siliconflow.cn/v1", api_key="hosted-secret",
+                        asr_backend="cloud", asr_api_url="http://localhost:8100/v1",
+                        asr_api_key="", asr_endpoint_type="auto")
+    selected = cloud_settings(settings)
+    assert selected.api_url == "http://localhost:8100/v1"
+    assert selected.api_key == ""
+    assert selected.endpoint_type == "auto"
+    assert cloud_settings(Settings(asr_backend="cloud")) == Settings(asr_backend="cloud")
+
+
+def test_whisper_download_reports_progress_and_reuses_verified_cache(monkeypatch, tmp_path):
+    data = b"sample model data"
+    digest = hashlib.sha256(data).hexdigest()
+    url = f"https://example.test/models/{digest}/tiny.pt"
+    monkeypatch.setitem(sys.modules, "whisper", SimpleNamespace(_MODELS={"tiny": url}))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+
+    class Response(io.BytesIO):
+        headers = {"Content-Length": str(len(data))}
+
+    import src.whisper_models as models
+
+    monkeypatch.setattr(models.urllib.request, "urlopen", lambda *args, **kwargs: Response(data))
+    progress = []
+    target = ensure_model("tiny", lambda *args: progress.append(args))
+    assert target == model_path("tiny")
+    assert target.read_bytes() == data
+    assert ("download", 0, len(data)) in progress
+    assert inventory() == [("tiny", target, True)]
+
+    monkeypatch.setattr(models.urllib.request, "urlopen",
+                        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("redownload")))
+    assert ensure_model("tiny") == target
+
+
+def test_diagnostics_identifies_failed_stage_and_continues(monkeypatch):
+    monkeypatch.setattr(diagnostic_module, "check_capture", lambda settings: "设备可打开")
+    def fail_transcription(settings, progress=None):
+        raise RuntimeError("音频模型不存在")
+    monkeypatch.setattr(diagnostic_module, "check_transcription", fail_transcription)
+    monkeypatch.setattr(diagnostic_module, "check_answer", lambda settings: "模型可回答")
+    lines = []
+    assert not diagnostic_module.run_diagnostics(Settings(), lines.append)
+    assert any("✕ 语音转写：音频模型不存在" in line for line in lines)
+    assert any("✓ 回答模型：模型可回答" in line for line in lines)
+    assert "1 项未通过" in lines[-1]
 
 
 @pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows DPAPI")

@@ -14,7 +14,7 @@ from src.audio_capture import AudioSession
 from src.context import Paper, build_prompt
 from src.hotkeys import Hotkeys
 from src.llm_client import LLMClient, safe_error
-from src.settings import ROOT, Settings, load_settings
+from src.settings import ASSET_ROOT, ROOT, Settings, configure_bundled_tools, load_settings
 from src.settings_dialog import SettingsDialog
 from src.theme import APP_STYLE
 from src.transcriber import SpeechTranscriber
@@ -107,7 +107,7 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
         super().__init__()
         self.settings = config if isinstance(config, Settings) else load_settings()
         self.setWindowTitle("InterPilot · 论文分享助手")
-        self.setWindowIcon(QtGui.QIcon(str(ROOT / "logo.png")))
+        self.setWindowIcon(QtGui.QIcon(str(ASSET_ROOT / "logo.png")))
         self.resize(1280, 900)
         self.bridge = Bridge()
         self.bridge.event.connect(self.on_event)
@@ -284,6 +284,16 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
         self.live_partial_label.setProperty("state", "idle")
         self.live_partial_label.setFixedHeight(42)
         live_layout.addWidget(self.live_partial_label)
+        self.asr_setup_label = QtWidgets.QLabel("")
+        self.asr_setup_label.setObjectName("panelCaption")
+        self.asr_setup_label.setWordWrap(True)
+        self.asr_setup_label.hide()
+        live_layout.addWidget(self.asr_setup_label)
+        self.asr_progress = QtWidgets.QProgressBar()
+        self.asr_progress.setRange(0, 100)
+        self.asr_progress.setValue(0)
+        self.asr_progress.hide()
+        live_layout.addWidget(self.asr_progress)
         separator = QtWidgets.QFrame()
         separator.setFrameShape(QtWidgets.QFrame.HLine)
         separator.setObjectName("softDivider")
@@ -580,7 +590,7 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
                 self.session_stopping = True
                 self.session.stop()
                 self.record_btn.setEnabled(False)
-                self.record_btn.setText("正在完成转写…")
+                self.record_btn.setText("正在停止…")
                 self.record_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaStop))
                 self.status_label.setText("正在停止采集并处理剩余片段…")
             return
@@ -600,7 +610,7 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
             self.bridge.event.emit("audio:" + kind, identifier, payload))
         for widget in [self.settings_btn, self.audio_btn]:
             widget.setEnabled(False)
-        self.record_btn.setText("暂停监听")
+        self.record_btn.setText("取消准备" if settings.asr_backend == "local" else "暂停监听")
         self.record_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPause))
         self.status_label.setText("正在启动音频设备…")
         self.session.start()
@@ -623,7 +633,38 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
             self.warning_label.setText(payload)
         elif kind == "asr_status":
             self.status_label.setText(payload)
+            self.asr_setup_label.setText(payload)
+            self.asr_setup_label.setVisible("Whisper" in payload)
+            if "已就绪" in payload:
+                self.asr_progress.hide()
+        elif kind == "asr_progress":
+            phase, done, total = payload
+            name = self.settings.whisper_model
+            if phase == "download":
+                amount = f"{done / 1_000_000:.1f} / {total / 1_000_000:.1f} MB" if total else f"{done / 1_000_000:.1f} MB"
+                self.asr_setup_label.setText(f"首次初始化 · 正在下载 Whisper {name} · {amount}")
+                self.asr_progress.setRange(0, 100 if total else 0)
+                if total:
+                    self.asr_progress.setValue(min(100, int(done * 100 / total)))
+                self.asr_setup_label.show()
+                self.asr_progress.show()
+                self.status_label.setText(self.asr_setup_label.text())
+            elif phase == "verify":
+                self.asr_setup_label.setText(f"正在校验 Whisper {name} 缓存…")
+                self.asr_setup_label.show()
+                self.asr_progress.setRange(0, 0)
+                self.asr_progress.show()
+            elif phase == "load":
+                self.asr_setup_label.setText(f"正在载入 Whisper {name}…")
+                self.asr_setup_label.show()
+                self.asr_progress.setRange(0, 0)
+                self.asr_progress.show()
+            elif phase == "ready":
+                self.asr_progress.hide()
         elif kind == "capture_started":
+            self.asr_setup_label.hide()
+            self.asr_progress.hide()
+            self.record_btn.setText("暂停监听")
             self.status_label.setText("正在监听 · 等待语音分段")
         elif kind == "capture_stopped":
             self.status_label.setText("采集已停止 · 正在完成剩余转写")
@@ -638,6 +679,8 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
                 meter.setValue(0)
             self.live_partials.clear()
             self.render_live_partials()
+            self.asr_setup_label.hide()
+            self.asr_progress.hide()
             self.record_btn.setText("开始监听")
             self.record_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.SP_MediaPlay))
             self.status_label.setText("监听已停止，转写已完成")
@@ -1002,6 +1045,43 @@ class InterviewAssistantGUI(QtWidgets.QMainWindow):
 
 
 if __name__ == "__main__":
+    configure_bundled_tools()
+    if "--self-test-asr" in sys.argv:
+        import traceback
+
+        try:
+            from src.diagnostics import check_transcription
+
+            check_transcription(Settings(whisper_model="base"))
+        except Exception:
+            (ROOT / "self-test-error.txt").write_text(traceback.format_exc(),
+                                                       encoding="utf-8")
+            raise SystemExit(1)
+        raise SystemExit(0)
+    if "--self-test" in sys.argv:
+        import shutil
+        import traceback
+
+        try:
+            import pyaudiowpatch
+            import tiktoken
+            import torch
+            import whisper
+
+            assert pyaudiowpatch.PyAudio
+            assert whisper.load_model
+            assert torch.mm(torch.ones((2, 2)), torch.ones((2, 2))).sum().item() == 8
+            assert tiktoken.get_encoding("cl100k_base").encode("test")
+            assert shutil.which("ffmpeg"), "FFmpeg is unavailable"
+            app = QtWidgets.QApplication([])
+            window = InterviewAssistantGUI(Settings(), register_hotkeys=False)
+            assert not window.windowIcon().isNull(), "Application icon is unavailable"
+            window.close()
+        except Exception:
+            (ROOT / "self-test-error.txt").write_text(traceback.format_exc(),
+                                                       encoding="utf-8")
+            raise SystemExit(1)
+        raise SystemExit(0)
     QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
     app = QtWidgets.QApplication(sys.argv)
     app.setFont(QtGui.QFont("Microsoft YaHei UI", 10))

@@ -20,7 +20,11 @@ def safe_error(exc, secret=""):
         return f"API 请求失败（HTTP {status}），请检查密钥和模型访问权限。"
     if status:
         return f"API 请求失败（HTTP {status}），请检查密钥、模型权限、额度和请求大小。"
-    message = str(exc).replace(secret, "[已隐藏]") if secret else str(exc)
+    message = str(exc)
+    secrets = (secret,) if isinstance(secret, str) else secret
+    for item in secrets:
+        if item:
+            message = message.replace(item, "[已隐藏]")
     if type(exc).__module__.startswith(("openai", "httpx", "httpcore")):
         return f"连接失败：{type(exc).__name__}，请检查网络或超时设置。"
     return message[:400]
@@ -117,6 +121,12 @@ class LLMClient:
 
     def close(self):
         self.client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
     def list_models(self):
         return sorted(item.id for item in self.client.models.list().data)

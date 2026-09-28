@@ -97,6 +97,7 @@ class AudioSession:
         self.partial_latest = {}
         self.partial_lock = threading.Lock()
         self.thread = None
+        self.transcriber = SpeechTranscriber(settings=settings)
 
     def start(self):
         self.thread = threading.Thread(target=self._run, daemon=True, name="audio-session")
@@ -148,14 +149,6 @@ class AudioSession:
             return bool(self.partial_latest)
 
     def _transcribe(self):
-        transcriber = SpeechTranscriber(settings=self.settings)
-        if self.settings.asr_backend == "local":
-            try:
-                self.emit("asr_status", f"正在准备 Whisper {self.settings.whisper_model}…")
-                transcriber.preload()
-                self.emit("asr_status", "Whisper 已就绪 · 正在实时监听")
-            except Exception as exc:
-                self.emit("warning", "Whisper 加载失败：" + safe_error(exc, self.settings.api_key))
         while (not self.capture_done.is_set() or not self.pending.empty() or
                self._has_partial()):
             final_queue_item = False
@@ -171,14 +164,15 @@ class AudioSession:
                 if not self.closed.is_set():
                     if segment.final:
                         self.emit("asr_status", f"正在校正 {segment.source} · 待处理 {self.pending.qsize()} 段")
-                    text = transcriber.transcribe(segment.path)
+                    text = self.transcriber.transcribe(segment.path)
                     if text and not self.closed.is_set():
                         if segment.final:
                             self.emit("transcript", Transcript(segment.source, segment.timestamp, text))
                         else:
                             self.emit("partial", (segment.source, segment.timestamp, text))
             except Exception as exc:
-                self.emit("warning", "转写失败：" + safe_error(exc, self.settings.api_key))
+                self.emit("warning", "转写失败：" + safe_error(
+                    exc, (self.settings.api_key, self.settings.asr_api_key)))
             finally:
                 segment.path.unlink(missing_ok=True)
                 if final_queue_item:
@@ -191,8 +185,18 @@ class AudioSession:
         raw = queue.Queue(maxsize=256)
         overflow = threading.Event()
         worker = threading.Thread(target=self._transcribe, daemon=True, name="transcription")
-        worker.start()
         try:
+            if self.settings.asr_backend == "local":
+                self.emit("asr_status", f"正在准备 Whisper {self.settings.whisper_model}…")
+                self.transcriber.preload(
+                    progress=lambda phase, done, total:
+                        self.emit("asr_progress", (phase, done, total)),
+                    cancelled=self.stop_event.is_set,
+                )
+                if self.stop_event.is_set():
+                    return
+                self.emit("asr_status", "Whisper 已就绪 · 正在启动音频设备")
+            worker.start()
             audio = pa.PyAudio()
             sources = []
             if self.settings.mic_enabled:
@@ -249,11 +253,15 @@ class AudioSession:
                     self.emit("warning", "录音缓冲区溢出，部分音频可能丢失。")
                     overflow.clear()
         except Exception as exc:
-            if isinstance(exc, OSError):
+            if self.stop_event.is_set():
+                detail = "初始化已取消"
+            elif isinstance(exc, OSError):
                 detail = "所选设备目前不可用。请确认耳机/麦克风已连接，关闭独占该设备的程序，然后刷新并重新选择设备。"
             else:
-                detail = safe_error(exc, self.settings.api_key)
-            self.emit("warning", "录音失败：" + detail)
+                detail = safe_error(exc, (self.settings.api_key, self.settings.asr_api_key))
+            if not self.stop_event.is_set():
+                prefix = "Whisper 初始化失败：" if not worker.is_alive() and self.settings.asr_backend == "local" else "录音失败："
+                self.emit("warning", prefix + detail)
         finally:
             for stream in streams:
                 try:
@@ -272,7 +280,8 @@ class AudioSession:
                 self._save(chunker.flush(), source, chunker.rate, chunker.channels)
             self.capture_done.set()
             self.emit("capture_stopped", None)
-            worker.join()
+            if worker.ident is not None:
+                worker.join()
             self.emit("session_done", None)
 
 

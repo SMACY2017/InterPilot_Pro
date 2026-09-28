@@ -96,6 +96,30 @@ def test_visual_hierarchy_and_settings_dialog(monkeypatch):
     window.close()
 
 
+def test_asr_settings_show_only_selected_backend(monkeypatch, tmp_path):
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    monkeypatch.setattr("src.settings_dialog.list_devices", lambda: [])
+    cached = tmp_path / "base.pt"
+    models = [("tiny", tmp_path / "tiny.pt", False), ("base", cached, True)]
+    monkeypatch.setattr("src.settings_dialog.inventory", lambda: models)
+    dialog = SettingsDialog(Settings(whisper_model="base"))
+    dialog.show()
+    dialog.findChild(QtWidgets.QTabWidget).setCurrentIndex(2)
+    app.processEvents()
+    dialog.on_local_models(models, "")
+    assert dialog.local_panel.isVisible()
+    assert not dialog.cloud_panel.isVisible()
+    assert dialog.values().whisper_model == "base"
+    assert "已下载" in dialog.local_model.currentText()
+    assert str(cached) in dialog.local_cache_status.text()
+    dialog.asr_backend.setCurrentIndex(1)
+    app.processEvents()
+    assert not dialog.local_panel.isVisible()
+    assert dialog.cloud_panel.isVisible()
+    assert dialog.values().asr_backend == "cloud"
+    dialog.close()
+
+
 def test_partial_transcript_is_available_to_manual_request():
     _app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     window = main.InterviewAssistantGUI(Settings(), register_hotkeys=False)

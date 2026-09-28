@@ -8,9 +8,21 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from ctypes import wintypes
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+        else Path(__file__).resolve().parents[1])
+ASSET_ROOT = (Path(sys._MEIPASS) if getattr(sys, "frozen", False)
+              else ROOT)
 SETTINGS_PATH = ROOT / "config.local.json"
 SECRET_PATH = ROOT / "config.key"
+ASR_SECRET_PATH = ROOT / "config.asr.key"
+
+
+def configure_bundled_tools():
+    """Make tools shipped inside a frozen bundle visible to subprocesses."""
+    if getattr(sys, "frozen", False) and (ASSET_ROOT / "ffmpeg.exe").is_file():
+        os.environ["PATH"] = str(ASSET_ROOT) + os.pathsep + os.environ.get("PATH", "")
+
+
 SYSTEM_PROMPT = """你是论文分享与讨论助手。根据论文摘录、当前幻灯片和带来源的讨论，给出演讲者能快速阅读的中文提示。
 优先输出：关注点；最多三条回答要点；依据（文件名、PDF页码）。区分论文事实和你的推断。
 只有提供的资料明确支持时才能引用页码、数值和实验结论；信息不足时明确说尚无法确认，不要编造。
@@ -33,6 +45,9 @@ class Settings:
     asr_backend: str = "local"
     whisper_model: str = "base"
     asr_model: str = "FunAudioLLM/SenseVoiceSmall"
+    asr_api_url: str = ""
+    asr_api_key: str = ""
+    asr_endpoint_type: str = "auto"
     language: str = "auto"
     mic_enabled: bool = True
     system_enabled: bool = True
@@ -71,6 +86,12 @@ class Settings:
             raise ValueError("未知的接口兼容模式")
         if self.asr_backend not in ("local", "cloud"):
             raise ValueError("未知的转写方式")
+        if self.asr_api_url and not self.asr_api_url.startswith(("https://", "http://")):
+            raise ValueError("音频 API 地址需要以 https:// 或 http:// 开头")
+        if self.asr_endpoint_type not in ("auto", "self_hosted", "hosted"):
+            raise ValueError("未知的音频服务位置")
+        if self.asr_backend == "cloud" and not self.asr_model.strip():
+            raise ValueError("请填写云端转写模型 ID")
         if self.capture_mode not in ("screen", "region"):
             raise ValueError("未知的截图方式")
         limits = {"chunk_seconds": (2, 30), "silence_ms": (200, 3000),
@@ -89,6 +110,7 @@ class Settings:
         self.validate()
         data = asdict(self)
         data.pop("api_key")
+        data.pop("asr_api_key")
         path = Path(path)
         temporary = path.with_name(path.name + ".tmp")
         temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -98,6 +120,10 @@ class Settings:
                 save_secret(self.api_key)
             else:
                 SECRET_PATH.unlink(missing_ok=True)
+            if self.remember_api_key and self.asr_api_key:
+                save_secret(self.asr_api_key, ASR_SECRET_PATH)
+            else:
+                ASR_SECRET_PATH.unlink(missing_ok=True)
 
 
 class _Blob(ctypes.Structure):
@@ -153,9 +179,10 @@ def load_settings(path=SETTINGS_PATH):
     legacy_key = legacy.defaults().get("api_key", "")
     if Path(path).exists():
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        names = {f.name for f in fields(Settings)} - {"api_key"}
+        names = {f.name for f in fields(Settings)} - {"api_key", "asr_api_key"}
         for name in names & data.keys():
             setattr(settings, name, data[name])
     settings.api_key = os.environ.get("SILICONFLOW_API_KEY") or load_secret() or legacy_key
+    settings.asr_api_key = os.environ.get("INTERPILOT_ASR_API_KEY") or load_secret(ASR_SECRET_PATH)
     settings.validate()
     return settings
